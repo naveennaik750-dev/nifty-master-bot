@@ -5,119 +5,126 @@ import time
 from datetime import datetime
 import google.generativeai as genai
 
-# --- 1. PRO CONFIG & THEME ---
-st.set_page_config(page_title="Nifty Quantum Elite", layout="wide", initial_sidebar_state="expanded")
+# --- 1. PRO TERMINAL THEME & CONFIG ---
+st.set_page_config(page_title="Nifty Master Pro Ultra", layout="wide")
 
-# Neon Dark Theme CSS
+# Neon Professional Styling
 st.markdown("""
     <style>
     .stApp { background-color: #06090d; color: #e1e4e8; }
     [data-testid="stMetricValue"] { color: #00ffcc !important; font-family: 'Courier New', monospace; }
     .stAlert { background-color: #12171d; border: 1px solid #30363d; color: #00ffcc; }
-    .sidebar .sidebar-content { background-image: linear-gradient(#12171d,#12171d); color: white; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ENGINES (AI & DATA) ---
-def load_ai():
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            return genai.GenerativeModel('gemini-1.5-flash')
-    except: return None
-    return None
+# AI Setup with Safety Wrapper
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except:
+    st.error("⚠️ Setup Required: Add GEMINI_API_KEY to Streamlit Cloud Secrets!")
+    st.stop()
 
-@st.cache_data(ttl=15)
-def fetch_market_data(tf):
-    try:
-        df = yf.download("^NSEI", period="2d", interval=tf, progress=False)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df if not df.empty else None
-    except: return None
-
-# --- 3. SIDEBAR NAVIGATION ---
-ai_model = load_ai()
+# --- 2. MULTI-PAGE NAVIGATION (Sidebar) ---
 with st.sidebar:
-    st.title("🛡️ QUANTUM HUB")
-    view = st.radio("Select Dashboard", ["Live Scalp Terminal", "Institutional OI Analytics"])
-    timeframe = st.selectbox("Precision Timeframe", ["1m", "5m", "15m", "1h"], index=0)
-    st.divider()
+    st.title("🚀 Alpha Navigation")
+    page = st.radio("Switch View", ["Current Market", "Derivative Model"])
+    interval = st.selectbox("Interval", ["1m", "5m", "15m", "1h"], index=0)
     
-    # Live News Feed (Stable Version)
+    st.divider()
+    # ADD-ON: Live News Ticker in Sidebar
     st.subheader("📰 Market Pulse")
     try:
         news = yf.Ticker("^NSEI").news[:3]
         for item in news:
-            st.caption(f"**{item.get('title', 'News Update')}**")
-            st.write(f"[Read More]({item.get('link', '#')})")
-            st.divider()
-    except: st.write("News sync in progress...")
-
-# --- 4. VIEW: LIVE SCALP TERMINAL ---
-if view == "Live Scalp Terminal":
-    st.markdown("<h2 style='text-align: center; color: #00ffcc;'>⚡ NIFTY REAL-TIME SCALPER</h2>", unsafe_allow_html=True)
-    data = fetch_market_data(timeframe)
+            st.caption(f"**{item.get('publisher', 'NSE')}**")
+            st.write(f"[{item.get('title', 'Market Update')}]({item.get('link', '#')})")
+    except: st.caption("News sync pending...")
     
-    if data is not None:
-        # Technical Logic
-        ltp = float(data['Close'].iloc[-1])
-        ema21 = data['Close'].ewm(span=21).mean().iloc[-1]
-        vwap = (data['Close'] * data['Volume']).cumsum() / data['Volume'].cumsum()
-        cur_vwap = vwap.iloc[-1]
+    st.divider()
+    st.caption(f"Last Refreshed: {datetime.now().strftime('%H:%M:%S')}")
+
+# --- HELPER: DATA ENGINE ---
+def get_nifty_data(tf):
+    try:
+        df = yf.download("^NSEI", period="2d", interval=tf, progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        return df
+    except: return pd.DataFrame()
+
+# --- 3. PAGE 1: CURRENT MARKET (Improved with Tech Indicators) ---
+if page == "Current Market":
+    st.markdown("<h1 style='text-align: center;'>🌐 LIVE MARKET ANALYSIS</h1>", unsafe_allow_html=True)
+    
+    hist = get_nifty_data(interval)
+    
+    if not hist.empty:
+        ltp = hist['Close'].iloc[-1]
+        open_price = hist['Open'].iloc[0]
+        change = ltp - open_price
         
-        # UI Metrics
-        c1, c2, c3 = st.columns(3)
-        c1.metric("NIFTY SPOT", f"₹{ltp:,.2f}", f"{ltp - data['Open'].iloc[-1]:.2f}")
+        # ADD-ON: Technical Indicator Calculations
+        ema21 = hist['Close'].ewm(span=21).mean().iloc[-1]
+        # RSI Calculation (14 Period)
+        delta = hist['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+
+        # Top Metric Row
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("NIFTY 50", f"{ltp:.2f}", f"{change:+.2f}")
         c2.metric("EMA 21", f"{ema21:.1f}")
-        c3.metric("VWAP", f"{cur_vwap:.1f}")
+        c3.metric("RSI (14)", f"{rsi:.1f}")
+        c4.metric("Trend", "🟢 BULLISH" if ltp > ema21 else "🔴 BEARISH")
 
-        # AI Quantum Signal
         st.divider()
-        if ai_model:
-            with st.expander("🤖 VIEW AI TRADE LOGIC (Targets TP1-TP6)", expanded=True):
-                try:
-                    p = f"Nifty at {ltp}. Above EMA21: {ltp > ema21}. Above VWAP: {ltp > cur_vwap}. Provide: Direction, Entry, SL, and 6 Targets (50-pt gaps)."
-                    st.info(ai_model.generate_content(p).text)
-                except: st.warning("AI processing limit reached. Use EMA21 as support.")
         
-        st.line_chart(data['Close'], height=400)
-    else:
-        st.warning("🔄 Connecting to NSE Stream... Ensure market is open (9:15 AM - 3:30 PM).")
+        # AI Trade Logic (TP1-TP6)
+        st.subheader("🤖 AI Quantum Signal (Master Targets)")
+        try:
+            prompt = f"Nifty at {ltp}. RSI: {rsi:.1f}. Trend: {'Bullish' if ltp > ema21 else 'Bearish'}. Suggest: Direction, Entry, SL, and 6 Targets (TP1-TP6)."
+            response = model.generate_content(prompt)
+            st.info(response.text)
+        except: st.warning("AI Overloaded. Scalping default: Watch for EMA 21 crossover.")
+        
+        st.line_chart(hist['Close'], height=400)
 
-# --- 5. VIEW: OI ANALYTICS ---
+# --- 4. PAGE 2: DERIVATIVE MODEL (Improved with Heatmap) ---
 else:
-    st.markdown("<h2 style='text-align: center; color: #00ffcc;'>📊 DERIVATIVE HEATMAP</h2>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #00ffcc;'>📊 DERIVATIVE MODEL SHEET</h1>", unsafe_allow_html=True)
     
-    # Dynamic Strike Generation
-    spot = fetch_market_data("1m")['Close'].iloc[-1] if fetch_market_data("1m") is not None else 24400
-    base = round(spot / 50) * 50
-    
-    df_oi = pd.DataFrame({
-        "STRIKE": [base + i for i in range(-150, 200, 50)],
-        "CALL OI Δ": [150000, 89000, 45000, 120000, 240000, 410000, 12000],
-        "PUT OI Δ": [45000, 120000, 310000, 450000, 89000, 15000, 5000]
-    })
+    # Live Data Simulation
+    df_data = {
+        "STRIKE": [24300, 24350, 24400, 24450, 24500],
+        "CALL OI CHG": [45000, -12000, 89000, 110000, 230000],
+        "PUT OI CHG": [98000, 76000, 44000, -5000, 1200]
+    }
+    df = pd.DataFrame(df_data)
 
-    def highlight_oi(val):
-        if val > 300000: return 'background-color: #800000; color: white'
+    def style_oi(val):
+        # ADD-ON: Heatmap Logic
+        if val > 100000: return 'background-color: #800000; color: white' # High Resistance
+        if val > 50000: return 'background-color: #004d00; color: white' # Strong Support
         return 'color: #00ffcc'
 
-    col_l, col_r = st.columns(2)
-    with col_l:
-        st.subheader("Resistance (Calls)")
-        st.dataframe(df_oi[['STRIKE', 'CALL OI Δ']].style.map(highlight_oi, subset=['CALL OI Δ']), use_container_width=True, hide_index=True)
-    with col_r:
-        st.subheader("Support (Puts)")
-        st.dataframe(df_oi[['STRIKE', 'PUT OI Δ']].style.map(highlight_oi, subset=['PUT OI Δ']), use_container_width=True, hide_index=True)
+    col_call, col_put = st.columns(2)
+    with col_call:
+        st.success("🟢 NIFTY CALL OPTIONS (Resistance)")
+        st.dataframe(df[['STRIKE', 'CALL OI CHG']].style.map(style_oi, subset=['CALL OI CHG']), use_container_width=True, hide_index=True)
+        
+    with col_put:
+        st.error("🔴 NIFTY PUT OPTIONS (Support)")
+        st.dataframe(df[['STRIKE', 'PUT OI CHG']].style.map(style_oi, subset=['PUT OI CHG']), use_container_width=True, hide_index=True)
 
-    # 6-Point Dashboard
+    # ADD-ON: 6-Point Master Metrics Expanded
     st.divider()
+    st.subheader("📑 6-Point Master Execution Check")
     m_cols = st.columns(6)
-    m_data = [("PCR", "0.94"), ("MAX PAIN", base), ("VOLATILITY", "LOW"), ("TREND", "SIDEWAYS"), ("EMA SIG", "BUY"), ("VWAP SIG", "SELL")]
-    for i, (label, val) in enumerate(m_data):
-        m_cols[i].metric(label, val)
-
-# Refresh every 15 seconds
-time.sleep(15)
-st.rerun()
+    metrics = [
+        ("PCR", "0.86", "Bearish"),
+        ("EMA", "BUY", "Above"),
+        ("OI", "SELL", "Heavy Call"),
+        ("VOL",
