@@ -1,5 +1,3 @@
-kiteconnect
-google-generativeai
 pandas
-requests
+yfinance
 streamlit
