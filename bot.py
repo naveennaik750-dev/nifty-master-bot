@@ -4,120 +4,80 @@ import yfinance as yf
 import time
 from datetime import datetime
 import google.generativeai as genai
-from streamlit_lightweight_charts import renderLightweightCharts
 
-# --- 1. PRO UI CONFIGURATION ---
-st.set_page_config(page_title="Nifty Master Pro", layout="wide", initial_sidebar_state="expanded")
-
-# Custom Professional CSS
-st.markdown("""
-    <style>
-    [data-testid="stSidebar"] { background-color: #0b0e11; border-right: 1px solid #2b2f36; }
-    .stApp { background-color: #0b0e11; color: #d1d4dc; }
-    .metric-card { background: #161a1e; padding: 15px; border-radius: 10px; border: 1px solid #2b2f36; }
-    div[data-testid="stMetricValue"] { color: #ffffff; font-size: 24px; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- 1. AI & THEME CONFIG ---
+st.set_page_config(page_title="Nifty Master Pro", layout="wide")
 
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except:
-    st.error("⚠️ AI Key Missing in Secrets")
+    st.error("⚠️ Setup Required: Add GEMINI_API_KEY to Streamlit Cloud Secrets!")
     st.stop()
 
-# --- 2. OPTIMIZED DATA ENGINE ---
-@st.cache_data(ttl=300)
-def get_nifty_ohlc(tf):
-    try:
-        data = yf.download("^NSEI", period="1d", interval=tf, progress=False)
-        return data
-    except:
-        return pd.DataFrame()
-
-# --- 3. SIDEBAR NAVIGATION ---
+# --- 2. MULTI-PAGE NAVIGATION ---
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/bullish.png", width=80)
-    st.markdown("<h2 style='color:white;'>PRO TERMINAL</h2>", unsafe_allow_html=True)
-    page = st.selectbox("Switch Workspace", ["Live Terminal", "Derivative Sheet"])
-    tf = st.selectbox("Interval", ["1m", "5m", "15m", "1h"], index=1)
+    st.title("🚀 Navigation Hub")
+    page = st.radio("Switch View", ["Current Market", "Derivative Model"])
+    interval = st.selectbox("Interval", ["1m", "5m", "15m", "1h"], index=2)
     st.divider()
-    st.caption(f"Sync: {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"Last Refreshed: {datetime.now().strftime('%H:%M:%S')}")
 
-# --- 4. WORKSPACE: LIVE TERMINAL ---
-if page == "Live Terminal":
-    # Top Metrics Row
-    data = get_nifty_ohlc(tf)
-    if not data.empty:
-        ltp = float(data['Close'].iloc[-1])
-        change = ltp - float(data['Open'].iloc[0])
-        
-        m1, m2, m3 = st.columns(3)
-        with m1: st.metric("NIFTY 50", f"{ltp:,.2f}", f"{change:+.2f}")
-        with m2: st.metric("TREND", "BULLISH" if change > 0 else "BEARISH")
-        with m3: st.metric("VOLATILITY", "HIGH" if abs(change) > 50 else "STABLE")
-
-    st.divider()
+# --- 3. PAGE 1: CURRENT MARKET ---
+if page == "Current Market":
+    st.markdown("<h1 style='text-align: center;'>🌐 LIVE MARKET ANALYSIS</h1>", unsafe_allow_html=True)
     
-    # Angel One Style Chart
-    st.markdown("### 📈 Real-Time Candlestick Analysis")
-    if not data.empty:
-        df = data.reset_index()
-        df.columns = ['time', 'open', 'high', 'low', 'close', 'adj', 'vol']
-        df['time'] = df['time'].astype(int) // 10**9
+    # Fetch Live Data
+    nifty = yf.Ticker("^NSEI")
+    hist = nifty.history(period="1d", interval=interval)
+    
+    if not hist.empty:
+        ltp = hist['Close'].iloc[-1]
+        change = ltp - hist['Open'].iloc[0]
         
-        chart_data = df[['time', 'open', 'high', 'low', 'close']].to_dict('records')
-        
-        c_options = {
-            "layout": {"backgroundColor": "#0b0e11", "textColor": "#d1d4dc"},
-            "grid": {"vertLines": {"visible": False}, "horzLines": {"color": "#1f2226"}},
-            "rightPriceScale": {"borderColor": "#2b2f36"},
-            "timeScale": {"borderColor": "#2b2f36", "timeVisible": True}
-        }
-        
-        series = [{
-            "type": 'Candlestick',
-            "data": chart_data,
-            "options": {"upColor": "#089981", "downColor": "#f23645", "borderVisible": False}
-        }]
-        
-        renderLightweightCharts(series=series, options=c_options, height=500)
+        c1, c2 = st.columns(2)
+        c1.metric("NIFTY 50", f"{ltp:.2f}", f"{change:+.2f}")
+        c2.metric("Trend", "🟢 BULLISH" if change > 0 else "🔴 BEARISH")
 
-    # Gemini AI Trade Suggester
-    st.divider()
-    st.markdown("### 🤖 Gemini AI Trade Signal")
-    with st.container():
-        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-        if st.button("Generate Scalp Setup"):
-            # Applying your specific trading rules
-            prompt = f"Nifty LTP {ltp}. Trade under $5, SL $2. Give 6 targets."
-            st.write(ai_model.generate_content(prompt).text)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.divider()
+        st.subheader("🤖 AI Trade Logic (6 Targets)")
+        prompt = f"Analyze Nifty at {ltp}. Suggest trade direction, Entry, SL, and 6 Targets (TP1-TP6)."
+        st.markdown(f"```\n{model.generate_content(prompt).text}\n```")
+        st.line_chart(hist['Close'])
 
-# --- 5. WORKSPACE: DERIVATIVE SHEET ---
+# --- 4. PAGE 2: DERIVATIVE MODEL SHEET ---
 else:
-    st.markdown("## 📑 Weekly Option Chain Sheet")
-    # Simulation of the side-by-side table from your images
-    col_c, col_p = st.columns(2)
+    st.markdown("<h1 style='text-align: center; color: #cc0000;'>📊 DERIVATIVE MODEL SHEET</h1>", unsafe_allow_html=True)
     
-    dummy_data = {
-        "STRIKE": [24300, 24350, 24400, 24450],
-        "OI CHANGE": [450000, -120000, 890000, 230000]
+    # Live Data Simulation for the Sheet
+    df_data = {
+        "STRIKE": [24300, 24350, 24400, 24450, 24500],
+        "CALL OI CHG": [45000, -12000, 89000, 110000, 230000],
+        "PUT OI CHG": [98000, 76000, 44000, -5000, 1200]
     }
-    df_sheet = pd.DataFrame(dummy_data)
+    df = pd.DataFrame(df_data)
 
-    def pro_style(val):
-        color = '#089981' if val > 0 else '#f23645'
-        return f'color: {color}; font-weight: bold; border-left: 3px solid {color}'
+    def style_oi(val):
+        color = 'background-color: #008000; color: white' if val > 0 else 'background-color: #ff4b4b; color: white'
+        return color
 
-    with col_c:
-        st.markdown("<h4 style='color:#089981;'>CALL DATA</h4>", unsafe_allow_html=True)
-        st.dataframe(df_sheet.style.map(pro_style, subset=['OI CHANGE']), use_container_width=True)
-    
-    with col_p:
-        st.markdown("<h4 style='color:#f23645;'>PUT DATA</h4>", unsafe_allow_html=True)
-        st.dataframe(df_sheet.style.map(pro_style, subset=['OI CHANGE']), use_container_width=True)
+    col_call, col_put = st.columns(2)
+    with col_call:
+        st.success("🟢 NIFTY CALL OPTIONS")
+        # FIXED: Using .map() instead of .applymap()
+        st.dataframe(df[['STRIKE', 'CALL OI CHG']].style.map(style_oi, subset=['CALL OI CHG']), use_container_width=True, hide_index=True)
+        
+    with col_put:
+        st.error("🔴 NIFTY PUT OPTIONS")
+        st.dataframe(df[['STRIKE', 'PUT OI CHG']].style.map(style_oi, subset=['PUT OI CHG']), use_container_width=True, hide_index=True)
 
-# Auto-refresh optimized for Rate Limits
-time.sleep(300)
+    # 6-Point Metrics Analysis
+    st.divider()
+    st.subheader("📑 6-Point Master Metrics")
+    m1, m2, m3 = st.columns(3)
+    m1.info("1️⃣ PCR: 0.86\n\n2️⃣ EMA: BUY")
+    m2.write("3️⃣ OI: SELL\n\n4️⃣ VOL: SELL")
+    m3.warning("5️⃣ GAMMA: WATCH\n\n6️⃣ VWAP: SELL")
+
+time.sleep(60)
 st.rerun()
