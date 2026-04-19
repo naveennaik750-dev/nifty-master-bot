@@ -8,7 +8,7 @@ import google.generativeai as genai
 # --- 1. PRO TERMINAL THEME & CONFIG ---
 st.set_page_config(page_title="Nifty Master Pro Ultra", layout="wide")
 
-# Neon Professional Styling
+# Added: Neon Professional Styling
 st.markdown("""
     <style>
     .stApp { background-color: #06090d; color: #e1e4e8; }
@@ -17,7 +17,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# AI Setup with Safety Wrapper
+# AI Setup
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -27,72 +27,70 @@ except:
 
 # --- 2. MULTI-PAGE NAVIGATION (Sidebar) ---
 with st.sidebar:
-    st.title("🚀 Alpha Navigation")
+    st.title("🚀 Alpha Hub")
     page = st.radio("Switch View", ["Current Market", "Derivative Model"])
     interval = st.selectbox("Interval", ["1m", "5m", "15m", "1h"], index=0)
     
     st.divider()
-    # ADD-ON: Live News Ticker in Sidebar
+    # ADD-ON: Live News Ticker (Stable Version)
     st.subheader("📰 Market Pulse")
     try:
-        news = yf.Ticker("^NSEI").news[:3]
-        for item in news:
-            st.caption(f"**{item.get('publisher', 'NSE')}**")
+        news_feed = yf.Ticker("^NSEI").news[:3]
+        for item in news_feed:
+            st.caption(f"**{item.get('publisher', 'NSE News')}**")
             st.write(f"[{item.get('title', 'Market Update')}]({item.get('link', '#')})")
     except: st.caption("News sync pending...")
     
     st.divider()
     st.caption(f"Last Refreshed: {datetime.now().strftime('%H:%M:%S')}")
 
-# --- HELPER: DATA ENGINE ---
-def get_nifty_data(tf):
+# --- HELPER: BROKER-FREE DATA ENGINE ---
+def get_clean_data(tf):
     try:
+        # Fetches 2 days to calculate RSI correctly
         df = yf.download("^NSEI", period="2d", interval=tf, progress=False)
+        # Fix for the Multi-Index 'nan' error
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         return df
     except: return pd.DataFrame()
 
-# --- 3. PAGE 1: CURRENT MARKET (Improved with Tech Indicators) ---
+# --- 3. PAGE 1: CURRENT MARKET (With Added Tech Indicators) ---
 if page == "Current Market":
     st.markdown("<h1 style='text-align: center;'>🌐 LIVE MARKET ANALYSIS</h1>", unsafe_allow_html=True)
     
-    hist = get_nifty_data(interval)
+    hist = get_clean_data(interval)
     
     if not hist.empty:
         ltp = hist['Close'].iloc[-1]
-        open_price = hist['Open'].iloc[0]
-        change = ltp - open_price
+        change = ltp - hist['Open'].iloc[-1]
         
-        # ADD-ON: Technical Indicator Calculations
+        # ADD-ON: RSI & EMA Indicator Layer
         ema21 = hist['Close'].ewm(span=21).mean().iloc[-1]
-        # RSI Calculation (14 Period)
         delta = hist['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+        rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
 
-        # Top Metric Row
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("NIFTY 50", f"{ltp:.2f}", f"{change:+.2f}")
-        c2.metric("EMA 21", f"{ema21:.1f}")
-        c3.metric("RSI (14)", f"{rsi:.1f}")
-        c4.metric("Trend", "🟢 BULLISH" if ltp > ema21 else "🔴 BEARISH")
+        # Professional Metric Display
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("NIFTY 50", f"{ltp:.2f}", f"{change:+.2f}")
+        m2.metric("EMA 21", f"{ema21:.1f}")
+        m3.metric("RSI (14)", f"{rsi:.1f}")
+        m4.metric("Trend", "🟢 BULLISH" if ltp > ema21 else "🔴 BEARISH")
 
         st.divider()
         
-        # AI Trade Logic (TP1-TP6)
-        st.subheader("🤖 AI Quantum Signal (Master Targets)")
+        # Keep: AI Trade Logic (TP1-TP6)
+        st.subheader("🤖 AI Quantum Signal (6 Targets)")
         try:
-            prompt = f"Nifty at {ltp}. RSI: {rsi:.1f}. Trend: {'Bullish' if ltp > ema21 else 'Bearish'}. Suggest: Direction, Entry, SL, and 6 Targets (TP1-TP6)."
-            response = model.generate_content(prompt)
-            st.info(response.text)
-        except: st.warning("AI Overloaded. Scalping default: Watch for EMA 21 crossover.")
+            prompt = f"Nifty at {ltp}. RSI: {rsi:.1f}. Trend: {'Bullish' if ltp > ema21 else 'Bearish'}. Provide: Trade direction, Entry, SL, and 6 Targets (TP1-TP6)."
+            st.info(model.generate_content(prompt).text)
+        except: st.warning("AI Syncing... Observe EMA 21 crossover.")
         
         st.line_chart(hist['Close'], height=400)
 
-# --- 4. PAGE 2: DERIVATIVE MODEL (Improved with Heatmap) ---
+# --- 4. PAGE 2: DERIVATIVE MODEL (With Added Heatmap) ---
 else:
     st.markdown("<h1 style='text-align: center; color: #00ffcc;'>📊 DERIVATIVE MODEL SHEET</h1>", unsafe_allow_html=True)
     
@@ -104,27 +102,29 @@ else:
     }
     df = pd.DataFrame(df_data)
 
-    def style_oi(val):
-        # ADD-ON: Heatmap Logic
-        if val > 100000: return 'background-color: #800000; color: white' # High Resistance
+    def style_heatmap(val):
+        # ADD-ON: Heatmap Logic for Resistance/Support
+        if val > 100000: return 'background-color: #800000; color: white' # Strong Resistance
         if val > 50000: return 'background-color: #004d00; color: white' # Strong Support
         return 'color: #00ffcc'
 
-    col_call, col_put = st.columns(2)
-    with col_call:
-        st.success("🟢 NIFTY CALL OPTIONS (Resistance)")
-        st.dataframe(df[['STRIKE', 'CALL OI CHG']].style.map(style_oi, subset=['CALL OI CHG']), use_container_width=True, hide_index=True)
+    c_call, c_put = st.columns(2)
+    with c_call:
+        st.success("🟢 CALL OPTIONS (Resistance)")
+        st.dataframe(df[['STRIKE', 'CALL OI CHG']].style.map(style_heatmap, subset=['CALL OI CHG']), use_container_width=True, hide_index=True)
         
-    with col_put:
-        st.error("🔴 NIFTY PUT OPTIONS (Support)")
-        st.dataframe(df[['STRIKE', 'PUT OI CHG']].style.map(style_oi, subset=['PUT OI CHG']), use_container_width=True, hide_index=True)
+    with c_put:
+        st.error("🔴 PUT OPTIONS (Support)")
+        st.dataframe(df[['STRIKE', 'PUT OI CHG']].style.map(style_heatmap, subset=['PUT OI CHG']), use_container_width=True, hide_index=True)
 
-    # ADD-ON: 6-Point Master Metrics Expanded
+    # Keep: 6-Point Master Metrics
     st.divider()
     st.subheader("📑 6-Point Master Execution Check")
     m_cols = st.columns(6)
-    metrics = [
-        ("PCR", "0.86", "Bearish"),
-        ("EMA", "BUY", "Above"),
-        ("OI", "SELL", "Heavy Call"),
-        ("VOL",
+    metrics = [("PCR", "0.86"), ("EMA", "BUY"), ("OI", "SELL"), ("VOL", "SPIKE"), ("GAMMA", "WATCH"), ("VWAP", "SELL")]
+    for i, (l, v) in enumerate(metrics):
+        m_cols[i].metric(l, v)
+
+# Auto-Refresh Speed (30s)
+time.sleep(30)
+st.rerun()
