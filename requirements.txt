@@ -1,0 +1,5 @@
+kiteconnect
+google-generativeai
+pandas
+requests
+streamlit
