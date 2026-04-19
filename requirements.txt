@@ -1,3 +1,8 @@
+kiteconnect
+google-generativeai
 pandas
-yfinance
+requests
 streamlit
+scipy
+matplotlib
+yfinance
